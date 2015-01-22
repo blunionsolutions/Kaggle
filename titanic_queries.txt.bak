@@ -1,0 +1,223 @@
+# loading train data
+trn<-read.csv("train.csv")
+summary(trn)
+str(trn)
+library(sqldf)
+# 
+
+trn_mod<-sqldf("select 
+survived,
+pclass,
+name,
+sex, 
+age,
+case when name like '%Mr.%' then 1 else 0 end as mr_ind,
+case when name like '%Master.%' then 1 else 0 end as master_ind,
+case when name like '%Miss.%' then 1 else 0 end as miss_ind,
+case when name like '%Mrs.%' then 1 else 0 end as mrs_ind,
+sibsp,
+parch,
+ticket,
+fare,
+cabin,
+embarked,
+case when sibsp > 0 then 1 else 0 end as family_ind
+from trn 
+")
+
+sqldf("select 
+sum(mr_ind + master_ind + miss_ind + mrs_ind) as tot,
+count(*)
+from trn_mod
+")
+
+sqldf("select 
+mr_ind, 
+master_ind, 
+miss_ind, 
+mrs_ind,
+sex,
+median(age),
+avg(age),
+count(*)
+from trn_mod
+where age is not null
+group by 
+mr_ind, 
+master_ind, 
+miss_ind, 
+mrs_ind,
+sex
+")
+
+trn_mod$age_mod<-trn_mod$age
+trn_mod$age_mod[is.na(trn_mod$age) & trn_mod$mr_ind==1]<-30
+trn_mod$age_mod[is.na(trn_mod$age) & trn_mod$mrs_ind==1]<-35
+trn_mod$age_mod[is.na(trn_mod$age) & trn_mod$miss_ind==1]<-21
+trn_mod$age_mod[is.na(trn_mod$age) & trn_mod$master_ind==1]<-3.5
+
+trn_mod$survived<-as.factor(trn_mod$survived)
+
+## selecting final data elements for analysis
+
+trn_final<-sqldf("select 
+survived,
+pclass,
+sex, 
+age_mod,
+fare,
+embarked,
+family_ind,
+sibsp,
+parch
+from trn_mod
+")
+
+write.table(trn_final, "train_final.csv", sep=",", row.names = FALSE, col.names = TRUE)
+
+## Use CSV to ARFF converter to convert CSV to ARFF for WEKA Analysis
+
+testidx <- which(1:length(trn_final[,1])%%4 == 0)
+#
+trn_final_train <- trn_final[-testidx,]
+trn_final_test <- trn_final[testidx,]
+
+library(randomForest)
+
+
+model.formula <-formula(survived  ~ 
+pclass 
++ sex
++ age_mod
++ fare
++ embarked
++ family_ind
++ sibsp
++ parch        
+)
+# 
+rf <- randomForest(formula=model.formula, data=trn_final_train, na.action=na.roughfix, ntree=500, do.trace=TRUE, importance=TRUE, mtry = 4)
+#
+#######################################
+# Step 5: model review, prediction and comparison with actual vs predicted, also looking at precision and recall
+#######################################
+#
+rf
+save(rf ,file = "rf.rda")
+#load("rf.rda")
+#
+rn <- round(importance(rf), 2)
+#
+rn[order(rn[,4], decreasing=TRUE),]
+#
+# predicting test dataset
+pred<-predict(rf, trn_final_test)
+# 
+# viewing actual vs predicted table
+table(na.omit(trn_final_test)$survived , pred,
+        dnn=c("Actual", "Predicted"))
+
+table(pred, na.omit(trn_final_test)$survived ,
+        dnn=c("Predicted","Actual"))
+
+tbl<-table(pred, na.omit(trn_final_test)$survived)
+
+precision<-tbl[1]/(tbl[1] + tbl[3])
+recall<-tbl[1]/(tbl[1] + tbl[2])
+trunegrate<-tbl[4]/(tbl[3] + tbl[4])
+accuracy<-(tbl[1] + tbl[4] ) / (tbl[1] + tbl[2] + tbl[3] + tbl[4] )
+precision
+recall
+trunegrate
+accuracy
+
+####################################
+###### Scoring test data
+
+tst<-read.csv("test.csv")
+summary(tst)
+str(tst)
+
+
+tst_mod<-sqldf("select 
+0 as survived,
+pclass,
+name,
+sex, 
+age,
+case when name like '%Mr.%' then 1 else 0 end as mr_ind,
+case when name like '%Master.%' then 1 else 0 end as master_ind,
+case when name like '%Miss.%' then 1 else 0 end as miss_ind,
+case when name like '%Mrs.%' then 1 else 0 end as mrs_ind,
+sibsp,
+parch,
+ticket,
+fare,
+cabin,
+embarked,
+case when sibsp > 0 then 1 else 0 end as family_ind
+from tst 
+")
+
+str(tst_mod)
+
+sqldf("select 
+sum(mr_ind + master_ind + miss_ind + mrs_ind) as tot,
+count(*)
+from tst_mod
+")
+
+sqldf("select 
+mr_ind, 
+master_ind, 
+miss_ind, 
+mrs_ind,
+sex,
+median(age),
+avg(age),
+count(*)
+from tst_mod
+where age is not null
+group by 
+mr_ind, 
+master_ind, 
+miss_ind, 
+mrs_ind,
+sex
+")
+
+
+tst_mod$age_mod<-tst_mod$age
+tst_mod$age_mod[is.na(tst_mod$age) & tst_mod$mr_ind==1]<-30
+tst_mod$age_mod[is.na(tst_mod$age) & tst_mod$mrs_ind==1]<-35
+tst_mod$age_mod[is.na(tst_mod$age) & tst_mod$miss_ind==1]<-21
+tst_mod$age_mod[is.na(tst_mod$age) & tst_mod$master_ind==1]<-3.5
+
+tst_mod$survived<-as.factor(tst_mod$survived)
+
+## selecting final data elements for analysis
+
+tst_final<-sqldf("select 
+survived,
+pclass,
+sex, 
+age_mod,
+fare,
+embarked,
+family_ind,
+sibsp,
+parch
+from tst_mod
+")
+
+tst_final$survived<-factor(tst_final$survived, levels=c(levels(tst_final$survived), '1') )
+
+tst_final$embarked<-factor(tst_final$embarked, levels=c(levels(tst_final$embarked), '') )
+
+str(trn_final_train)
+
+str(tst_final)
+
+score<-predict(rf, tst_final)
+
+write.table(score, "titanic_score.csv", sep=",", row.names = FALSE, col.names = TRUE)
