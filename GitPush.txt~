@@ -7,7 +7,7 @@ git config --global user.email "blunionsolutions@gmail.com"
 git config --global user.name "blunion solutions"
 git config --list
 # to pull the files to local machine from Git use following command
-git pull git://github.com/blunionsolutions/Kaggle.git
+git pull git://github.com/blunionsolutions/R.git
 # check status of git
 git status
 # when changes are detected, need to add to those changes and then commit it.
